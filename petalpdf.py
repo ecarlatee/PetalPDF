@@ -53,6 +53,33 @@ def get_input(prompt_text, default=""):
         return input(f"\033[96m{prompt_text}\033[0m \033[90m(Entrée pour: {default})\033[0m: ") or default
     return input(f"\033[96m{prompt_text}\033[0m: ")
 
+def download_file(pdf_url, filepath, headers, max_size_bytes=None):
+    try:
+        response = requests.get(pdf_url, headers=headers, timeout=15, stream=True)
+        response.raise_for_status()
+        
+        # Vérification de la taille via les headers si disponible
+        if max_size_bytes and 'Content-Length' in response.headers:
+            size_bytes = int(response.headers['Content-Length'])
+            if size_bytes > max_size_bytes:
+                return False, f"Trop volumineux ({size_bytes / (1024*1024):.1f} Mo)"
+                
+        downloaded = 0
+        with open(filepath, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    downloaded += len(chunk)
+                    # Arrêter le téléchargement si ça dépasse la limite en plein milieu
+                    if max_size_bytes and downloaded > max_size_bytes:
+                        f.close()
+                        os.remove(filepath)
+                        return False, f"Trop volumineux (dépasse la limite en cours)"
+                    f.write(chunk)
+        return True, ""
+    except Exception as e:
+        return False, str(e)
+
+
 def main():
     clear_screen()
     print(ASCII_ART)
@@ -60,7 +87,6 @@ def main():
     animated_print("\033[1;35m✧ Welcome to PetalPDF / Bienvenue dans PetalPDF ✧\033[0m")
     print("\033[90m-------------------------------------------------\033[0m")
     
-    # Language Selection
     lang = ""
     while lang not in ['fr', 'en']:
         lang = input("\033[1;33m[?] Choose your language / Choisissez votre langue (fr/en) : \033[0m").strip().lower()
@@ -71,6 +97,8 @@ def main():
         t_scope_q = "Que souhaitez-vous explorer ?"
         t_scope_page = "Uniquement cette page"
         t_scope_site = "Tout le site (max 100 pages, peut être long)"
+        t_scope_adv = "Téléchargement avancé (limite de taille en Mo)"
+        t_size_q = "Taille maximale par PDF en Mo (Entrée pour ignorer)"
         t_dir = "Dossier de destination"
         t_scanning = "🔍 Analyse de la page en cours..."
         t_scanning_site = "🔍 Exploration du site en cours (recherche de PDFs)..."
@@ -81,7 +109,8 @@ def main():
         t_exists = "⏩ Le fichier {} existe déjà. Ignoré."
         t_success = "✔ Terminé !"
         t_fail = "✖ Échec :"
-        t_done = "🎉 Tous les téléchargements sont terminés ! Retrouvez vos fichiers dans :"
+        t_done = "🎉 Téléchargements terminés ! Retrouvez vos fichiers dans :"
+        t_retry_q = "Certains téléchargements ({}) ont échoué. Voulez-vous réessayer ? (o/n)"
         t_again = "Voulez-vous analyser une autre URL ? (o/n)"
         t_bye = "Merci d'avoir utilisé PetalPDF. À bientôt ! 🌸"
         default_dir = "PetalPDF_Fichiers"
@@ -91,6 +120,8 @@ def main():
         t_scope_q = "What do you want to scan?"
         t_scope_page = "Only this page"
         t_scope_site = "Entire site (max 100 pages, might take a while)"
+        t_scope_adv = "Advanced download (max file size in MB)"
+        t_size_q = "Max size per PDF in MB (Enter to skip limit)"
         t_dir = "Destination folder"
         t_scanning = "🔍 Scanning the page..."
         t_scanning_site = "🔍 Crawling site (looking for PDFs)..."
@@ -101,7 +132,8 @@ def main():
         t_exists = "⏩ File {} already exists. Skipping."
         t_success = "✔ Done!"
         t_fail = "✖ Failed:"
-        t_done = "🎉 All downloads complete! Find your files in:"
+        t_done = "🎉 Downloads complete! Find your files in:"
+        t_retry_q = "Some downloads ({}) failed. Do you want to retry? (y/n)"
         t_again = "Do you want to scan another URL? (y/n)"
         t_bye = "Thank you for using PetalPDF. See you soon! 🌸"
         default_dir = "PetalPDF_Files"
@@ -117,14 +149,31 @@ def main():
             if not url.startswith("http"):
                 print("\033[91m⚠️ Format d'URL invalide. / Invalid URL format.\033[0m")
 
-        # Scope Selection
         scope = ""
         print(f"\n\033[1;33m[?] {t_scope_q}\033[0m")
         print(f"   \033[36m1)\033[0m {t_scope_page}")
         print(f"   \033[36m2)\033[0m {t_scope_site}")
-        while scope not in ['1', '2']:
-            scope = input(f"\033[96m➤ Choix (1/2) \033[90m(Entrée pour: 1)\033[0m: ").strip()
+        print(f"   \033[35m3)\033[0m {t_scope_adv}")
+        
+        while scope not in ['1', '2', '3']:
+            scope = input(f"\033[96m➤ Choix (1/2/3) \033[90m(Entrée pour: 1)\033[0m: ").strip()
             if not scope: scope = "1"
+
+        max_size_bytes = None
+        base_scope = scope
+        
+        if scope == '3':
+            size_str = get_input(f"➤ {t_size_q}")
+            try:
+                max_size_bytes = float(size_str.replace(',','.')) * 1024 * 1024
+            except ValueError:
+                max_size_bytes = None
+            
+            sub_scope = ""
+            while sub_scope not in ['1', '2']:
+                sub_scope = input(f"\033[96m➤ Page (1) ou Site (2) ? \033[90m(Entrée pour: 1)\033[0m: ").strip()
+                if not sub_scope: sub_scope = "1"
+            base_scope = sub_scope
 
         dest_dir = get_input(f"\n➤ {t_dir}", default=default_dir)
 
@@ -134,7 +183,7 @@ def main():
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
         pdf_links = set()
 
-        if scope == '1':
+        if base_scope == '1':
             print(f"\n\033[1;33m{t_scanning}\033[0m")
             try:
                 response = requests.get(url, headers=headers, timeout=10)
@@ -167,7 +216,6 @@ def main():
                 
                 try:
                     resp = requests.get(current_url, headers=headers, timeout=5)
-                    # Skip if not HTML (like images) to avoid slowing down parsing
                     if 'text/html' not in resp.headers.get('Content-Type', ''):
                         continue
                         
@@ -183,17 +231,14 @@ def main():
                             pdf_links.add(full_url)
                         elif parsed.netloc == base_netloc and parsed.scheme in ['http', 'https']:
                             clean_url = full_url.split('#')[0]
-                            
-                            # Scan intelligent : on ignore les extensions qui ne sont clairement pas des pages
                             ignored_exts = {
                                 '.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp', '.ico',
-                                '.css', '.js', '.js.map', '.json', '.xml', '.csv',
+                                '.css', '.js', '.json', '.xml', '.csv',
                                 '.zip', '.rar', '.7z', '.tar', '.gz',
                                 '.mp3', '.mp4', '.avi', '.mov', '.wav',
                                 '.exe', '.dmg', '.iso', '.apk'
                             }
                             ext = os.path.splitext(parsed.path)[1].lower()
-                            
                             if ext not in ignored_exts:
                                 if clean_url not in visited:
                                     to_visit.add(clean_url)
@@ -208,6 +253,8 @@ def main():
             animated_print(f"\n\033[1;32m{t_found.format(len(pdf_links))}\033[0m")
             print("\033[90m" + "-" * 40 + "\033[0m")
             
+            failed_downloads = []
+
             for index, pdf_url in enumerate(pdf_links, 1):
                 filename = os.path.basename(urlparse(pdf_url).path)
                 if not filename.lower().endswith('.pdf'):
@@ -221,15 +268,35 @@ def main():
                 if os.path.exists(filepath):
                     print(f"\n   \033[90m{t_exists.format(filename)}\033[0m")
                     continue
-                    
-                try:
-                    pdf_response = requests.get(pdf_url, headers=headers, timeout=10)
-                    pdf_response.raise_for_status()
-                    with open(filepath, 'wb') as f:
-                        f.write(pdf_response.content)
+                
+                success, error_msg = download_file(pdf_url, filepath, headers, max_size_bytes)
+                if success:
                     print(f"\033[92m{t_success}\033[0m")
-                except Exception as e:
-                    print(f"\n   \033[91m{t_fail} {e}\033[0m")
+                else:
+                    print(f"\n   \033[91m{t_fail} {error_msg}\033[0m")
+                    # On permet de réessayer seulement les vraies erreurs, pas ceux exclus par la taille
+                    if "Trop volumineux" not in error_msg:
+                        failed_downloads.append((pdf_url, filename, filepath))
+
+            # Option Réessayer en cas d'erreur
+            while failed_downloads:
+                print("\033[90m" + "-" * 40 + "\033[0m")
+                retry = input(f"\033[1;33m[?] {t_retry_q.format(len(failed_downloads))} \033[0m").strip().lower()
+                if retry in ['o', 'y', 'oui', 'yes']:
+                    still_failed = []
+                    for pdf_url, filename, filepath in failed_downloads:
+                        print(f"\033[36m[RETRY] {t_downloading.format(filename)}\033[0m", end=" ")
+                        sys.stdout.flush()
+                        
+                        success, error_msg = download_file(pdf_url, filepath, headers, max_size_bytes)
+                        if success:
+                            print(f"\033[92m{t_success}\033[0m")
+                        else:
+                            print(f"\n   \033[91m{t_fail} {error_msg}\033[0m")
+                            still_failed.append((pdf_url, filename, filepath))
+                    failed_downloads = still_failed
+                else:
+                    break
 
             print("\033[90m" + "-" * 40 + "\033[0m")
             print(f"\n\033[1;32m{t_done}\033[0m \033[1;37m{os.path.abspath(dest_dir)}\033[0m\n")
