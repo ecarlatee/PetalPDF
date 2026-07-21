@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+PetalPDF_Fichiers/
+PetalPDF_Files/
+.DS_Store
