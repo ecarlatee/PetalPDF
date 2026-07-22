@@ -37,7 +37,7 @@ PetalPDF est un assistant interactif puissant en ligne de commande (CLI) pour as
 
 Lancez simplement le script avec Python :
 ```bash
-python petalpdf.py
+python3 petalpdf.py
 ```
 
 Laissez-vous guider par l'interface ! PetalPDF vous demandera :
