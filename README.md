@@ -5,7 +5,7 @@ PetalPDF est un assistant interactif puissant en ligne de commande (CLI) pour as
 ![Bannière](https://img.shields.io/badge/Python-3.6%2B-blue)
 ![Licence](https://img.shields.io/badge/License-MIT-green)
 
-## Fonctionnalités ✨
+## Fonctionnalités
 
 - **Mode Assistant (Wizard)** : Plus besoin de retenir des lignes de commande complexes, le programme vous pose des questions claires.
 - **Crawling de Site (Bot)** : PetalPDF peut se contenter d'une seule page, ou agir comme un robot en explorant toutes les pages liées du site pour y débusquer les PDF cachés (par blocs de 100 pages).
@@ -19,7 +19,7 @@ PetalPDF est un assistant interactif puissant en ligne de commande (CLI) pour as
 - **Système de Reprise (Anti-crash) 💾** : Vous avez appuyé sur `Ctrl+C` par erreur ou eu une coupure ? Pas de panique, PetalPDF sauvegarde l'état en temps réel et vous proposera de reprendre là où vous vous étiez arrêté.
 - **Bilingue et Esthétique** : Support complet FR/EN, animations fluides, interface chaleureuse rose pétale.
 
-## Installation 🛠️
+## Installation
 
 1. Clonez ce dépôt GitHub sur votre machine :
    ```bash
@@ -33,7 +33,7 @@ PetalPDF est un assistant interactif puissant en ligne de commande (CLI) pour as
    ```
    *Note : Le fichier requirements installe `requests`, `beautifulsoup4` (pour le scan) et `pypdf` (pour le renommage intelligent).*
 
-## Utilisation 🚀
+## Utilisation
 
 Lancez simplement le script avec Python :
 ```bash
